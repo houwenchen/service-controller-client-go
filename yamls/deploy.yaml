@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: maliao-deployment
+  annotations:
+    "service": "true"
+    #"service-type": "ClusterIP"
+    "service-type": "NodePort"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: maliao
+  template:
+    metadata:
+      name: maliao-pod
+      labels:
+        name: maliao
+    spec:
+      containers:
+      - name: maliao
+        image: wenchenhou/maliao
+        ports:
+        - containerPort: 80
