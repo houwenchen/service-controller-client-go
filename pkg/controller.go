@@ -170,13 +170,10 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 	}
 
 	service, err := util.GetServicesForDeploymet(ctx, deployment, sc.client)
-	if !errors.IsNotFound(err) {
-		return err
-	}
 
 	// 子资源控制逻辑
 	// 1. 如果 service 不存在，并且需要创建 service ，则创建
-	if service == nil && needService == "true" {
+	if errors.IsNotFound(err) && service == nil && needService == "true" {
 		svc, _ := sc.createService(deployment, typeService)
 		klog.Infof("start create service: %s, in %s", name, namespace)
 		_, err = sc.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
@@ -186,12 +183,12 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 		}
 	}
 	// 2. 如果 service 不存在，并且不需要创建 service ，则忽略
-	if service == nil && needService == "false" {
+	if errors.IsNotFound(err) && service == nil && needService == "false" {
 		klog.Infof("needn't create service: %s, in %s", name, namespace)
 		return nil
 	}
 	// 3. 如果 service 存在，并且不需要创建 service，则删除
-	if service != nil && needService == "false" {
+	if err == nil && service != nil && needService == "false" {
 		klog.Infof("start delete service: %s, in %s", name, namespace)
 		err := sc.client.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
@@ -201,23 +198,17 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 	}
 	// 4. 如果 service 存在，并且需要创建 service ，
 	// 4.1 如果 typeService 变化，则重建 service
-	if service != nil && needService == "true" {
+	if err == nil && service != nil && needService == "true" {
 		// 获取 service 的类型，与 typeService 比较
 		actualType := service.Spec.Type
 		if existTypeService && actualType != core.ServiceType(typeService) {
-			klog.Infof("start recreate service: %s, in %s", name, namespace)
-			// err := sc.client.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{})
-			// if err != nil {
-			// 	klog.Errorf("delete service: %s failed, err: %s", name, err)
-			// 	return err
-			// }
+			klog.Infof("start update service: %s, in %s", name, namespace)
 			svc, _ := sc.createService(deployment, typeService)
-			// _, err = sc.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
-			// if err != nil {
-			// 	klog.Errorf("create service: %s failed, err: %s", name, err)
-			// 	return err
-			// }
-			sc.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
+			_, err := sc.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
+			if err != nil {
+				klog.Errorf("update service: %s failed, err: %s", name, err)
+				return err
+			}
 		}
 	}
 	return nil
