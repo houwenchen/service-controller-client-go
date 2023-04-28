@@ -215,8 +215,12 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 }
 
 // 目前先适配 deloyment 中的 pod 只有一个端口的情况
-// 目前只支持 ClusterIP 的情况
+// TODO: 增加多个 port 时的适配情况
 func (sc *ServiceController) createService(deployment *apps.Deployment, typeService string) (*core.Service, error) {
+	// 增加对 deployment 的参数的校验
+	// TODO: 后续可以通过 webhook 实现参数的控制
+	sc.getPortsForDeployment()
+
 	selector := deployment.Spec.Selector.MatchLabels
 
 	service := &core.Service{
@@ -230,7 +234,7 @@ func (sc *ServiceController) createService(deployment *apps.Deployment, typeServ
 			Ports: []core.ServicePort{
 				{
 					TargetPort: intstr.IntOrString{IntVal: deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort},
-					Port:       80,
+					Port:       deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort,
 				},
 			},
 		},
@@ -239,6 +243,11 @@ func (sc *ServiceController) createService(deployment *apps.Deployment, typeServ
 	service.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(deployment, apps.SchemeGroupVersion.WithKind("Deployment"))}
 
 	return service, nil
+}
+
+// 获取 deployment 中 container 的port
+func (sc *ServiceController) getPortsForDeployment() {
+
 }
 
 func (sc *ServiceController) hanleError(ctx context.Context, dKey string, err error) {

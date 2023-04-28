@@ -1,24 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: maliao-deployment
+  name: nginx-deployment
   annotations:
     "service": "true"
-    #"service-type": "ClusterIP"
     "service-type": "NodePort"
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
-      name: maliao
+      name: nginx
   template:
     metadata:
-      name: maliao-pod
       labels:
-        name: maliao
+        name: nginx
     spec:
       containers:
-      - name: maliao
-        image: wenchenhou/maliao
+      - name: nginx
+        image: nginx:1.13
         ports:
         - containerPort: 80
