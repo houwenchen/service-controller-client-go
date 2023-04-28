@@ -1,5 +1,6 @@
 1. 需求简介：
 
+
     按照k8s中deployment controller的设计模式，写一个controller，
     可以根据deployment资源的annotation中：
   
