@@ -174,7 +174,7 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 	// 子资源控制逻辑
 	// 1. 如果 service 不存在，并且需要创建 service ，则创建
 	if errors.IsNotFound(err) && service == nil && needService == "true" {
-		svc, _ := sc.createService(deployment, typeService)
+		svc := sc.createService(deployment, typeService)
 		klog.Infof("start create service: %s, in %s", name, namespace)
 		_, err = sc.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
 		if err != nil {
@@ -203,7 +203,7 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 		actualType := service.Spec.Type
 		if existTypeService && actualType != core.ServiceType(typeService) {
 			klog.Infof("start update service: %s, in %s", name, namespace)
-			svc, _ := sc.createService(deployment, typeService)
+			svc := sc.createService(deployment, typeService)
 			_, err := sc.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
 			if err != nil {
 				klog.Errorf("update service: %s failed, err: %s", name, err)
@@ -214,14 +214,11 @@ func (sc *ServiceController) syncDeployment(ctx context.Context, dKey string) er
 	return nil
 }
 
-// 目前先适配 deloyment 中的 pod 只有一个端口的情况
-// TODO: 增加多个 port 时的适配情况
-func (sc *ServiceController) createService(deployment *apps.Deployment, typeService string) (*core.Service, error) {
-	// 增加对 deployment 的参数的校验
-	// TODO: 后续可以通过 webhook 实现参数的控制
-	sc.getPortsForDeployment()
-
-	selector := deployment.Spec.Selector.MatchLabels
+// 支持 deployment 中多个 pod 有多个 port 的情况
+func (sc *ServiceController) createService(deployment *apps.Deployment, typeService string) *core.Service {
+	// 将 deployment 中的所有的 port 与 container 名做映射
+	portsMap := sc.getPortsMapForDeployment(deployment)
+	servicePorts := sc.parsePortsMapToServicePorts(portsMap)
 
 	service := &core.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -230,24 +227,48 @@ func (sc *ServiceController) createService(deployment *apps.Deployment, typeServ
 		},
 		Spec: core.ServiceSpec{
 			Type:     core.ServiceType(typeService),
-			Selector: selector,
-			Ports: []core.ServicePort{
-				{
-					TargetPort: intstr.IntOrString{IntVal: deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort},
-					Port:       deployment.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort,
-				},
-			},
+			Selector: deployment.Spec.Selector.MatchLabels,
+			Ports:    servicePorts,
 		},
 	}
 
+	// 设置 owner ，这样在删除主资源时，子资源可以级联删除
 	service.OwnerReferences = []metav1.OwnerReference{*metav1.NewControllerRef(deployment, apps.SchemeGroupVersion.WithKind("Deployment"))}
 
-	return service, nil
+	return service
 }
 
 // 获取 deployment 中 container 的port
-func (sc *ServiceController) getPortsForDeployment() {
+func (sc *ServiceController) getPortsMapForDeployment(deployment *apps.Deployment) map[string]core.ContainerPort {
+	portsMap := map[string]core.ContainerPort{}
 
+	containerList := deployment.Spec.Template.Spec.Containers
+	for _, container := range containerList {
+		portList := container.Ports
+		for index, port := range portList {
+			// 以 container 的名字加索引作为 map 的 key ，后面作为 service 的不同 port 的 name
+			portsMap[fmt.Sprintf("%s-%d", container.Name, index)] = port
+		}
+	}
+
+	klog.Infof("portsMap info: %+v", portsMap)
+	return portsMap
+}
+
+func (sc *ServiceController) parsePortsMapToServicePorts(portsMap map[string]core.ContainerPort) []core.ServicePort {
+	servicePorts := []core.ServicePort{}
+
+	for name, ports := range portsMap {
+		sp := core.ServicePort{
+			Name:       name,
+			TargetPort: intstr.IntOrString{IntVal: ports.ContainerPort},
+			Port:       ports.ContainerPort,
+		}
+		servicePorts = append(servicePorts, sp)
+	}
+
+	klog.Infof("servicePorts info: %+v", servicePorts)
+	return servicePorts
 }
 
 func (sc *ServiceController) hanleError(ctx context.Context, dKey string, err error) {
