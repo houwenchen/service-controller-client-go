@@ -1,15 +1,15 @@
 1. 需求简介：
 
-  按照k8s中deployment controller的设计模式，写一个controller，
-  可以根据deployment资源的annotation中：
+    按照k8s中deployment controller的设计模式，写一个controller，
+    可以根据deployment资源的annotation中：
   
   1.1 
   
-  "service: bool"字段的值自动生成对应的service，并且service的名称为deployment资源名；
+    "service: bool"字段的值自动生成对应的service，并且service的名称为deployment资源名；
   
   1.2
   
-  "service-type: string"字段的值控制service的类型；
+    "service-type: string"字段的值控制service的类型；
 
 
 2. 几种情况如下：
