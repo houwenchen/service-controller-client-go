@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  annotations:
+    "service": "true"
+    "service-type": "ClusterIP"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: nginx
+  template:
+    metadata:
+      labels:
+        name: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.13
+        ports:
+        - containerPort: 80
+        - containerPort: 8080
+
+# result:
+# spec:
+#   clusterIP: 10.97.252.193
+#   clusterIPs:
+#   - 10.97.252.193
+#   internalTrafficPolicy: Cluster
+#   ipFamilies:
+#   - IPv4
+#   ipFamilyPolicy: SingleStack
+#   ports:
+#   - name: nginx-0
+#     port: 80
+#     protocol: TCP
+#     targetPort: 80
+#   - name: nginx-1
+#     port: 8080
+#     protocol: TCP
+#     targetPort: 8080
+#   selector:
+#     name: nginx
+#   sessionAffinity: None
+#   type: ClusterIP
